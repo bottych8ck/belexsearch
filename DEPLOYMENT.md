@@ -19,9 +19,9 @@ Wenn du die App auf Streamlit Cloud deployst, musst du die Secrets dort manuell 
 
 ```toml
 [gemini]
-api_key = "AIzaSyCZT5fZXsayq50JM8ebaDTa-KbbIx4xq4g"
-filestore_id = "fileSearchStores/belexgesetzessammlung-6sbxuyrjmv5z"
-project_id = "BELEX QUERIES"
+api_key = "YOUR_GOOGLE_GEMINI_API_KEY"
+filestore_id = "YOUR_FILESTORE_ID"
+project_id = "YOUR_PROJECT_NAME"
 ```
 
 5. Klicke auf **Save**
@@ -57,7 +57,7 @@ Für lokale Entwicklung:
 
 - `config.json` wird nicht mehr verwendet
 - Alle sensiblen Daten sind jetzt in `st.secrets`
-- Die `filestore_id` ist korrekt ausgefüllt: `fileSearchStores/belexgesetzessammlung-6sbxuyrjmv5z`
+- API-Keys und Filestore-IDs müssen in Streamlit Cloud Secrets konfiguriert werden
 
 ## Troubleshooting
 
