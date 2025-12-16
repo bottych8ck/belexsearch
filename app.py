@@ -210,10 +210,27 @@ def main():
             font-size: 0.95rem;
             color: #333;
             font-style: italic;
-            padding: 0.75rem;
+            padding: 1rem;
             background-color: white;
             border-radius: 0.25rem;
-            margin-top: 0.5rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .snippet-number {
+            display: inline-block;
+            background-color: #1f77b4;
+            color: white;
+            font-weight: bold;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
+            font-size: 0.85rem;
+        }
+        .snippet-divider {
+            border-top: 2px solid #d0d0d0;
+            margin: 1.5rem 0;
         }
         .answer-box {
             background-color: #e8f4f8;
@@ -340,8 +357,12 @@ def main():
                             if snippets:
                                 st.markdown("**Relevante Textstellen:**")
                                 for i, snippet in enumerate(snippets, 1):
-                                    with st.expander(f"Textstelle {i}", expanded=(i == 1)):
-                                        st.markdown(f"*\"{snippet}\"*")
+                                    st.markdown(f"""
+                                        <div class="source-snippet">
+                                            <span class="snippet-number">Chunk {i}</span>
+                                            <div style="margin-top: 0.5rem;">"{snippet}"</div>
+                                        </div>
+                                    """, unsafe_allow_html=True)
                 else:
                     # Bei wenigen Quellen: Karten-Layout
                     for i, (title, snippets) in enumerate(sorted(sources_dict.items()), 1):
@@ -377,12 +398,17 @@ def main():
 
                         if snippets:
                             st.markdown("**Relevante Textstellen:**")
-                            for snippet in snippets:
+                            for j, snippet in enumerate(snippets, 1):
                                 st.markdown(f"""
                                     <div class="source-snippet">
-                                        "{snippet}"
+                                        <span class="snippet-number">Chunk {j}</span>
+                                        <div style="margin-top: 0.5rem;">"{snippet}"</div>
                                     </div>
                                 """, unsafe_allow_html=True)
+
+                            # Trennlinie nach allen Snippets einer Quelle
+                            if i < len(sources_dict):
+                                st.markdown('<div class="snippet-divider"></div>', unsafe_allow_html=True)
 
                         st.markdown("</div>", unsafe_allow_html=True)
             else:
