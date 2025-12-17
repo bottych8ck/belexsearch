@@ -30,7 +30,7 @@ class BELEXSearchEngine:
         try:
             # Query Gemini with File Search tool (exactly like the template)
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-pro",
                 contents=query,
                 config=types.GenerateContentConfig(
                     tools=[
