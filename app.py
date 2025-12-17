@@ -259,7 +259,28 @@ def main():
     # Header
     st.title("⚖️ BELEX Rechtsdatenbank")
     st.markdown("### Durchsuchen Sie das Berner Bildungsrecht mit KI-Unterstützung")
-    st.info("🧪 **Testversion für die Bildungsdirektion des Kantons Bern** | Entwickelt von [kueblaw.ch](https://kueblaw.ch)")
+
+    # Testversions-Banner
+    st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1rem 0 1.5rem 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        ">
+            <h3 style="margin: 0 0 0.5rem 0; color: white;">🧪 Testversion</h3>
+            <p style="margin: 0; font-size: 1.1rem;">
+                Für die <strong>Bildungsdirektion des Kantons Bern</strong>
+            </p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem;">
+                Entwickelt von <a href="https://kueblaw.ch" target="_blank" style="color: #ffd700; text-decoration: none; font-weight: bold;">kueblaw.ch</a>
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
     st.divider()
 
     # Initialisiere die Search Engine und Client
