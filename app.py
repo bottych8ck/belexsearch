@@ -259,6 +259,7 @@ def main():
     # Header
     st.title("⚖️ BELEX Rechtsdatenbank")
     st.markdown("### Durchsuchen Sie das Berner Bildungsrecht mit KI-Unterstützung")
+    st.info("🧪 **Testversion für die Bildungsdirektion des Kantons Bern** | Entwickelt von [kueblaw.ch](https://kueblaw.ch)")
     st.divider()
 
     # Initialisiere die Search Engine und Client
@@ -673,6 +674,16 @@ def main():
 
             **Hinweis:** Die Antworten sind KI-generiert und
             sollten nicht als offizielle Rechtsberatung verstanden werden.
+        """)
+
+        st.divider()
+
+        st.markdown("### 🧪 Testversion")
+        st.markdown("""
+            Diese Testversion wurde für die **Bildungsdirektion des Kantons Bern** entwickelt.
+
+            **Entwickelt von:**
+            [kueblaw.ch](https://kueblaw.ch)
         """)
 
         st.divider()
