@@ -4,6 +4,7 @@ BELEX Streamlit App - Interaktive Suchoberfläche für Berner Gesetzessammlung
 """
 
 import re
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -124,23 +125,34 @@ def list_documents(api_key, filestore_id):
 
 
 def upload_file_to_filestore(client, filestore_id, uploaded_file, display_name=None):
-    """Lädt eine Datei in den Filestore hoch"""
+    """
+    Lädt eine Datei in den Filestore hoch.
+
+    Fügt Metadaten hinzu, um Web-App-Uploads zu markieren.
+    """
     try:
         # Temporär die Datei speichern
         import tempfile
         import os
+        from datetime import datetime
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
 
         try:
-            # Datei hochladen
-            upload_response = client.file_search.upload_to_file_search_store(
+            # Datei hochladen mit Metadaten
+            # Verwende file_search_stores.upload_to_file_search_store gemäß API-Dokumentation
+            upload_response = client.file_search_stores.upload_to_file_search_store(
                 file_search_store_name=filestore_id,
-                file_path=tmp_path,
-                mime_type=uploaded_file.type,
-                display_name=display_name or uploaded_file.name
+                file=tmp_path,
+                config={
+                    'display_name': display_name or uploaded_file.name,
+                    'custom_metadata': [
+                        {"key": "uploaded_via", "string_value": "webapp"},
+                        {"key": "upload_timestamp", "string_value": datetime.now().isoformat()}
+                    ]
+                }
             )
 
             return upload_response
@@ -155,23 +167,31 @@ def upload_file_to_filestore(client, filestore_id, uploaded_file, display_name=N
 
 
 def delete_document(api_key, document_name):
-    """Löscht ein Dokument aus dem Filestore"""
+    """
+    Löscht ein Dokument aus dem Filestore.
+
+    Verwendet force=true, damit alle zugehörigen Chunks auch gelöscht werden.
+    Laut API-Dokumentation gibt eine erfolgreiche Löschung ein leeres JSON-Objekt zurück.
+    """
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/{document_name}"
         headers = {"x-goog-api-key": api_key}
+        # force=true löscht auch alle zugehörigen Chunks
         params = {"force": "true"}
 
         response = requests.delete(url, headers=headers, params=params)
 
-        if response.status_code == 200:
+        # Erfolgreiche Löschung: Status 200 (OK) oder 204 (No Content)
+        # Die API gibt bei Erfolg ein leeres JSON-Objekt zurück
+        if response.status_code in [200, 204]:
             return True
         else:
-            st.error(f"Fehler beim Löschen: {response.status_code}")
-            st.error(response.text)
+            st.error(f"Fehler beim Löschen: Status {response.status_code}")
+            st.error(f"Response: {response.text}")
             return False
 
     except Exception as e:
-        st.error(f"Fehler beim Löschen: {e}")
+        st.error(f"Exception beim Löschen: {e}")
         return False
 
 
@@ -298,7 +318,7 @@ def main():
         st.session_state.last_query = ""
 
     # Tab-Navigation
-    tab1, tab2 = st.tabs(["🔍 Suche", "📁 Filestore-Verwaltung"])
+    tab1, tab2 = st.tabs(["🔍 Suche", "📚 Wissensgrundlagen"])
 
     with tab1:
         # Eingabebereich
@@ -437,8 +457,8 @@ def main():
                 st.info("ℹ️ Keine spezifischen Fundstellen verfügbar")
 
     with tab2:
-        st.markdown("## 📁 Dokumente")
-        st.markdown("Verwalten Sie die Dokumente in Ihrer Datenbank")
+        st.markdown("## 📚 Wissensgrundlagen")
+        st.markdown("Verwalten Sie die Dokumente in Ihrer Wissensdatenbank")
         st.divider()
 
         # Sub-Tabs für verschiedene Aktionen
@@ -447,54 +467,93 @@ def main():
         with subtab1:
             st.markdown("### 📋 Alle Dokumente")
 
-            col_btn1, col_btn2 = st.columns([1, 1])
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
             with col_btn1:
                 load_button = st.button("🔄 Dokumente laden", key="load_docs")
             with col_btn2:
-                check_duplicates = st.button("🔍 Duplikate prüfen", key="check_dupes")
+                own_uploads = st.button("📤 Eigene Uploads", key="own_uploads")
+            with col_btn3:
+                if st.session_state.get('show_own_uploads', False):
+                    refresh_own = st.button("🔄 Aktualisieren", key="refresh_own_uploads")
 
-            if check_duplicates:
-                with st.spinner("Prüfe auf Duplikate..."):
+            if own_uploads:
+                # Lösche Cache, um frische Daten zu erzwingen
+                if 'own_uploads_cache' in st.session_state:
+                    del st.session_state.own_uploads_cache
+
+                st.session_state.show_own_uploads = True
+
+            if st.session_state.get('show_own_uploads', False):
+                with st.spinner("Lade eigene Uploads..."):
                     documents = list_documents(st.session_state.api_key, st.session_state.filestore_id)
 
                     if documents:
-                        # Gruppiere nach Display-Name
-                        from collections import defaultdict
-                        name_groups = defaultdict(list)
-
+                        # Filtere nach customMetadata "uploaded_via: webapp"
+                        own_docs = []
                         for doc in documents:
-                            display_name = doc.get('displayName', 'Unbekannt')
-                            name_groups[display_name].append(doc)
+                            metadata = doc.get('customMetadata', [])
+                            # Prüfe, ob uploaded_via=webapp in den Metadaten ist
+                            is_webapp_upload = any(
+                                meta.get('key') == 'uploaded_via' and
+                                meta.get('stringValue') == 'webapp'
+                                for meta in metadata
+                            )
+                            if is_webapp_upload:
+                                own_docs.append(doc)
 
-                        # Finde Duplikate
-                        duplicates = {name: docs for name, docs in name_groups.items() if len(docs) > 1}
+                        if own_docs:
+                            # Sortiere nach createTime (neueste zuerst)
+                            sorted_docs = sorted(own_docs, key=lambda x: x.get('createTime', ''), reverse=True)
 
-                        if duplicates:
-                            total_dupes = sum(len(docs) - 1 for docs in duplicates.values())
-                            st.warning(f"⚠️ {total_dupes} Duplikat(e) gefunden in {len(duplicates)} Gruppe(n)!")
+                            st.success(f"✅ {len(sorted_docs)} eigene(s) Dokument(e) gefunden (neueste zuerst)")
 
-                            st.markdown("### Duplikate:")
-                            for display_name, docs in sorted(duplicates.items()):
-                                with st.expander(f"📄 {display_name} ({len(docs)}× vorhanden)", expanded=True):
-                                    st.write(f"**Anzahl:** {len(docs)} Kopien")
-                                    for i, doc in enumerate(docs, 1):
-                                        st.markdown(f"**Kopie {i}:**")
-                                        st.markdown(f"- ID: `{doc.get('name', 'N/A')}`")
-                                        if 'createTime' in doc:
-                                            st.markdown(f"- Hochgeladen: {doc['createTime']}")
-                                        size_bytes = doc.get('sizeBytes', 0)
-                                        try:
-                                            size_bytes = int(size_bytes) if size_bytes else 0
-                                            size_mb = size_bytes / (1024 * 1024)
-                                            if size_mb >= 1:
-                                                st.markdown(f"- Größe: {size_mb:.2f} MB")
-                                            else:
-                                                st.markdown(f"- Größe: {size_bytes:,} Bytes")
-                                        except:
-                                            pass
-                                        st.divider()
+                            # Zeige Dokumente chronologisch
+                            for i, doc in enumerate(sorted_docs, 1):
+                                display_name = doc.get('displayName', 'Unbekannt')
+                                bsg_nr = extract_bsg_number(display_name)
+
+                                col1, col2, col3 = st.columns([5, 2, 1])
+
+                                with col1:
+                                    if bsg_nr:
+                                        url = f"https://www.belex.sites.be.ch/api/de/texts_of_law/{bsg_nr}"
+                                        law_name = get_law_name(bsg_nr)
+                                        if law_name:
+                                            st.markdown(f"{i}. ⚖️ [{law_name}]({url}) · `{bsg_nr}`")
+                                        else:
+                                            st.markdown(f"{i}. ⚖️ [{display_name}]({url}) · `{bsg_nr}`")
+                                    else:
+                                        st.markdown(f"{i}. 📄 {display_name}")
+
+                                with col2:
+                                    if 'createTime' in doc:
+                                        create_time = doc['createTime'].split('T')[0]
+                                        create_datetime = doc['createTime'].split('T')
+                                        if len(create_datetime) > 1:
+                                            time_part = create_datetime[1].split('.')[0]
+                                            st.markdown(f"*{create_time} {time_part}*")
+                                        else:
+                                            st.markdown(f"*{create_time}*")
+
+                                with col3:
+                                    if st.button("🗑️", key=f"del_own_{doc.get('name', '')}", help="Dokument löschen"):
+                                        import time
+                                        success = delete_document(st.session_state.api_key, doc['name'])
+                                        if success:
+                                            st.success("✅ Dokument erfolgreich gelöscht!")
+                                            # Warte 5 Sekunden, damit die API-Änderung vollständig propagiert wird
+                                            with st.spinner("Warte auf API-Synchronisation (5 Sekunden)..."):
+                                                time.sleep(5.0)
+                                            # Lösche den Cache-Flag, damit beim nächsten Laden frische Daten abgerufen werden
+                                            if 'own_uploads_cache' in st.session_state:
+                                                del st.session_state.own_uploads_cache
+                                            st.rerun()
+
+                                # Trennlinie zwischen Dokumenten
+                                if i < len(sorted_docs):
+                                    st.divider()
                         else:
-                            st.success("✅ Keine Duplikate gefunden!")
+                            st.info("ℹ️ Keine eigenen Uploads gefunden. Nur Dokumente, die über diese Web-App hochgeladen wurden, werden hier angezeigt.")
                     else:
                         st.info("ℹ️ Keine Dokumente gefunden")
 
@@ -505,85 +564,142 @@ def main():
                     if documents:
                         st.success(f"✅ {len(documents)} Dokument(e) gefunden")
 
-                        # Dokumente nach Rechtsbuch (erste Ziffer) gruppieren
-                        from collections import defaultdict
-                        rechtsbuecher = defaultdict(list)
-                        documents_without_bsg = []
+                        # Sortierungsoption hinzufügen
+                        sort_option = st.radio(
+                            "Sortierung:",
+                            ["Nach Rechtsbuch gruppieren", "Nach Upload-Datum (neueste zuerst)"],
+                            horizontal=True,
+                            key="sort_option"
+                        )
 
-                        for doc in documents:
-                            display_name = doc.get('displayName', 'Unbekannt')
-                            bsg_nr = extract_bsg_number(display_name)
+                        if sort_option == "Nach Upload-Datum (neueste zuerst)":
+                            # Sortiere nach createTime (neueste zuerst)
+                            sorted_docs = sorted(documents, key=lambda x: x.get('createTime', ''), reverse=True)
 
-                            if bsg_nr:
-                                # Extrahiere Rechtsbuch (z.B. "430" aus "430.11")
-                                rechtsbuch = bsg_nr.split('.')[0]
-                                rechtsbuecher[rechtsbuch].append((bsg_nr, doc))
-                            else:
-                                documents_without_bsg.append(doc)
+                            st.markdown("---")
+                            st.markdown("### 📅 Alle Dokumente nach Upload-Datum")
 
-                        # Sortiere Rechtsbücher
-                        sorted_rechtsbuecher = sorted(rechtsbuecher.keys(), key=lambda x: (int(x) if x.isdigit() else 999999, x))
-
-                        # Zeige jedes Rechtsbuch als eigenen Abschnitt
-                        for rechtsbuch in sorted_rechtsbuecher:
-                            docs_list = rechtsbuecher[rechtsbuch]
-
-                            st.markdown(f"### 📂 Rechtsbuch {rechtsbuch} — Anzahl Gesetze: {len(docs_list)}")
-
-                            # Sortiere Gesetze nach BSG-Nummer
-                            for bsg_nr, doc in sorted(docs_list, key=lambda x: x[0]):
+                            # Zeige Dokumente chronologisch
+                            for i, doc in enumerate(sorted_docs, 1):
                                 display_name = doc.get('displayName', 'Unbekannt')
-                                law_name = get_law_name(bsg_nr)
+                                bsg_nr = extract_bsg_number(display_name)
 
-                                # Kompakte Zeile mit allen Infos
                                 col1, col2, col3 = st.columns([5, 2, 1])
 
                                 with col1:
-                                    # Link zur BELEX-Seite
-                                    url = f"https://www.belex.sites.be.ch/api/de/texts_of_law/{bsg_nr}"
-                                    if law_name:
-                                        st.markdown(f"⚖️ [{law_name}]({url}) · `{bsg_nr}`")
+                                    if bsg_nr:
+                                        url = f"https://www.belex.sites.be.ch/api/de/texts_of_law/{bsg_nr}"
+                                        law_name = get_law_name(bsg_nr)
+                                        if law_name:
+                                            st.markdown(f"{i}. ⚖️ [{law_name}]({url}) · `{bsg_nr}`")
+                                        else:
+                                            st.markdown(f"{i}. ⚖️ [{display_name}]({url}) · `{bsg_nr}`")
                                     else:
-                                        st.markdown(f"⚖️ [{display_name}]({url}) · `{bsg_nr}`")
+                                        st.markdown(f"{i}. 📄 {display_name}")
 
                                 with col2:
-                                    # Hochladedatum (nur Datum, ohne Zeit)
                                     if 'createTime' in doc:
                                         create_time = doc['createTime'].split('T')[0]
-                                        st.markdown(f"*{create_time}*")
+                                        create_datetime = doc['createTime'].split('T')
+                                        if len(create_datetime) > 1:
+                                            time_part = create_datetime[1].split('.')[0]
+                                            st.markdown(f"*{create_time} {time_part}*")
+                                        else:
+                                            st.markdown(f"*{create_time}*")
 
                                 with col3:
-                                    if st.button("🗑️", key=f"del_{doc.get('name', '')}", help="Dokument löschen"):
+                                    if st.button("🗑️", key=f"del_date_{doc.get('name', '')}", help="Dokument löschen"):
                                         if delete_document(st.session_state.api_key, doc['name']):
                                             st.success("✅ Dokument gelöscht!")
                                             st.rerun()
 
-                            st.divider()  # Trennlinie zwischen Rechtsbüchern
+                                # Trennlinie zwischen Dokumenten
+                                if i < len(sorted_docs):
+                                    st.divider()
 
-                        # Zeige Dokumente ohne BSG-Nummer separat
-                        if documents_without_bsg:
-                            st.markdown(f"### 📄 Dokumente ohne Rechtsbuchnummer — Anzahl: {len(documents_without_bsg)}")
+                        else:
+                            # Standard: Gruppierung nach Rechtsbuch
+                            st.markdown("---")
 
-                            for doc in documents_without_bsg:
+                            # Dokumente nach Rechtsbuch (erste Ziffer) gruppieren
+                            from collections import defaultdict
+                            rechtsbuecher = defaultdict(list)
+                            documents_without_bsg = []
+
+                            for doc in documents:
                                 display_name = doc.get('displayName', 'Unbekannt')
+                                bsg_nr = extract_bsg_number(display_name)
 
-                                # Kompakte Zeile
-                                col1, col2, col3 = st.columns([5, 2, 1])
+                                if bsg_nr:
+                                    # Extrahiere Rechtsbuch (z.B. "430" aus "430.11")
+                                    rechtsbuch = bsg_nr.split('.')[0]
+                                    rechtsbuecher[rechtsbuch].append((bsg_nr, doc))
+                                else:
+                                    documents_without_bsg.append(doc)
 
-                                with col1:
-                                    st.markdown(f"📄 {display_name}")
+                            # Sortiere Rechtsbücher
+                            sorted_rechtsbuecher = sorted(rechtsbuecher.keys(), key=lambda x: (int(x) if x.isdigit() else 999999, x))
 
-                                with col2:
-                                    # Hochladedatum
-                                    if 'createTime' in doc:
-                                        create_time = doc['createTime'].split('T')[0]
-                                        st.markdown(f"*{create_time}*")
+                            # Zeige jedes Rechtsbuch als eigenen Abschnitt
+                            for rechtsbuch in sorted_rechtsbuecher:
+                                docs_list = rechtsbuecher[rechtsbuch]
 
-                                with col3:
-                                    if st.button("🗑️", key=f"del_{doc.get('name', '')}", help="Dokument löschen"):
-                                        if delete_document(st.session_state.api_key, doc['name']):
-                                            st.success("✅ Dokument gelöscht!")
-                                            st.rerun()
+                                st.markdown(f"### 📂 Rechtsbuch {rechtsbuch} — Anzahl Gesetze: {len(docs_list)}")
+
+                                # Sortiere Gesetze nach BSG-Nummer
+                                for bsg_nr, doc in sorted(docs_list, key=lambda x: x[0]):
+                                    display_name = doc.get('displayName', 'Unbekannt')
+                                    law_name = get_law_name(bsg_nr)
+
+                                    # Kompakte Zeile mit allen Infos
+                                    col1, col2, col3 = st.columns([5, 2, 1])
+
+                                    with col1:
+                                        # Link zur BELEX-Seite
+                                        url = f"https://www.belex.sites.be.ch/api/de/texts_of_law/{bsg_nr}"
+                                        if law_name:
+                                            st.markdown(f"⚖️ [{law_name}]({url}) · `{bsg_nr}`")
+                                        else:
+                                            st.markdown(f"⚖️ [{display_name}]({url}) · `{bsg_nr}`")
+
+                                    with col2:
+                                        # Hochladedatum (nur Datum, ohne Zeit)
+                                        if 'createTime' in doc:
+                                            create_time = doc['createTime'].split('T')[0]
+                                            st.markdown(f"*{create_time}*")
+
+                                    with col3:
+                                        if st.button("🗑️", key=f"del_{doc.get('name', '')}", help="Dokument löschen"):
+                                            if delete_document(st.session_state.api_key, doc['name']):
+                                                st.success("✅ Dokument gelöscht!")
+                                                st.rerun()
+
+                                st.divider()  # Trennlinie zwischen Rechtsbüchern
+
+                            # Zeige Dokumente ohne BSG-Nummer separat
+                            if documents_without_bsg:
+                                st.markdown(f"### 📄 Dokumente ohne Rechtsbuchnummer — Anzahl: {len(documents_without_bsg)}")
+
+                                for doc in documents_without_bsg:
+                                    display_name = doc.get('displayName', 'Unbekannt')
+
+                                    # Kompakte Zeile
+                                    col1, col2, col3 = st.columns([5, 2, 1])
+
+                                    with col1:
+                                        st.markdown(f"📄 {display_name}")
+
+                                    with col2:
+                                        # Hochladedatum
+                                        if 'createTime' in doc:
+                                            create_time = doc['createTime'].split('T')[0]
+                                            st.markdown(f"*{create_time}*")
+
+                                    with col3:
+                                        if st.button("🗑️", key=f"del_nobsg_{doc.get('name', '')}", help="Dokument löschen"):
+                                            if delete_document(st.session_state.api_key, doc['name']):
+                                                st.success("✅ Dokument gelöscht!")
+                                                st.rerun()
                     else:
                         st.info("ℹ️ Keine Dokumente gefunden")
 
@@ -619,8 +735,7 @@ def main():
 
                             if result:
                                 st.success("✅ Datei erfolgreich hochgeladen und indexiert!")
-                                st.markdown("**Upload-Details:**")
-                                st.json(str(result))
+                                st.info("Die Datei wird jetzt im Hintergrund indexiert und steht in Kürze für Suchanfragen zur Verfügung.")
                             else:
                                 st.error("❌ Fehler beim Hochladen")
 
