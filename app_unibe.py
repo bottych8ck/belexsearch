@@ -531,84 +531,44 @@ def main():
 
     with tab2:
         st.markdown("## 🛠️ Promptengineering")
-        st.markdown("Hier können Sie den Systemprompt anpassen, um die Antworten des KI-Assistenten zu beeinflussen.")
         st.divider()
 
-        # Info-Box
-        st.info("""
-        💡 **Hinweis**: Der Systemprompt bestimmt, wie der KI-Assistent auf Ihre Fragen antwortet.
-        Sie können hier den Prompt anpassen oder den Standard-Prompt verwenden.
-        """)
+        # Aktueller Systemprompt - direkt anzeigen und editierbar
+        # Bestimme welcher Prompt gerade aktiv ist
+        if st.session_state.use_custom_prompt:
+            current_prompt = st.session_state.custom_system_prompt
+        else:
+            current_prompt = DEFAULT_SYSTEM_PROMPT
 
-        # Tabs für Default und Custom Prompt
-        prompt_tab1, prompt_tab2 = st.tabs(["📄 Standard-Prompt anzeigen", "✏️ Prompt bearbeiten"])
+        # Editierbares Textfeld für den aktuellen Systemprompt
+        edited_prompt = st.text_area(
+            "**Aktueller Systemprompt:**",
+            value=current_prompt,
+            height=500,
+            key="prompt_editor"
+        )
 
-        with prompt_tab1:
-            st.markdown("### 📄 Standard-Systemprompt")
-            st.markdown("Dies ist der voreingestellte Prompt, der verwendet wird, wenn Sie keine Anpassungen vornehmen:")
-            st.code(DEFAULT_SYSTEM_PROMPT, language="text")
-
-            if st.button("📋 Standard-Prompt in Editor kopieren"):
-                st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
-                st.session_state.use_custom_prompt = False
-                st.success("✅ Standard-Prompt wurde in den Editor kopiert")
-                st.rerun()
-
-        with prompt_tab2:
-            st.markdown("### ✏️ Systemprompt bearbeiten")
-
-            # Toggle für Custom Prompt
-            use_custom = st.checkbox(
-                "Angepassten Prompt verwenden",
-                value=st.session_state.use_custom_prompt,
-                help="Aktivieren Sie diese Option, um einen benutzerdefinierten Prompt zu verwenden"
-            )
-
-            st.session_state.use_custom_prompt = use_custom
-
-            # Text Area für Custom Prompt
-            custom_prompt = st.text_area(
-                "Systemprompt:",
-                value=st.session_state.custom_system_prompt,
-                height=400,
-                help="Passen Sie hier den Systemprompt an",
-                disabled=not use_custom
-            )
-
-            # Buttons
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                if st.button("💾 Änderungen speichern", disabled=not use_custom):
-                    st.session_state.custom_system_prompt = custom_prompt
-                    st.success("✅ Prompt wurde gespeichert und wird bei der nächsten Suche verwendet")
-
-            with col2:
-                if st.button("🔄 Auf Standard zurücksetzen"):
+        # Anwenden-Button
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("✅ Anwenden", type="primary", use_container_width=True):
+                # Prüfe, ob der Prompt geändert wurde
+                if edited_prompt != DEFAULT_SYSTEM_PROMPT:
+                    st.session_state.custom_system_prompt = edited_prompt
+                    st.session_state.use_custom_prompt = True
+                    st.success("✅ Angepasster Prompt wird ab jetzt verwendet")
+                else:
                     st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
                     st.session_state.use_custom_prompt = False
-                    st.success("✅ Prompt wurde auf Standard zurückgesetzt")
-                    st.rerun()
+                    st.success("✅ Standard-Prompt wird verwendet")
+                st.rerun()
 
-            with col3:
-                if st.button("❌ Änderungen verwerfen", disabled=not use_custom):
-                    st.session_state.custom_system_prompt = st.session_state.get('custom_system_prompt', DEFAULT_SYSTEM_PROMPT)
-                    st.info("ℹ️ Änderungen wurden verworfen")
-                    st.rerun()
-
-            # Aktueller Status
-            st.divider()
-            st.markdown("### 📊 Aktueller Status")
-            if st.session_state.use_custom_prompt:
-                st.success("✅ **Aktiv**: Es wird ein angepasster Systemprompt verwendet")
-
-                # Zeige Unterschiede, falls vorhanden
-                if st.session_state.custom_system_prompt != DEFAULT_SYSTEM_PROMPT:
-                    st.warning("⚠️ Der Prompt wurde vom Standard abgeändert")
-                else:
-                    st.info("ℹ️ Der Prompt entspricht dem Standard-Prompt")
-            else:
-                st.info("ℹ️ **Standard**: Es wird der Standard-Systemprompt verwendet")
+        with col2:
+            if st.button("🔄 Standard wiederherstellen", use_container_width=True):
+                st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
+                st.session_state.use_custom_prompt = False
+                st.success("✅ Standard-Prompt wiederhergestellt")
+                st.rerun()
 
     with tab3:
         st.markdown("## 📚 Wissensgrundlagen")
