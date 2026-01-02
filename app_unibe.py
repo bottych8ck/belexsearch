@@ -339,7 +339,7 @@ def main():
         ">
             <h3 style="margin: 0 0 0.5rem 0; color: white;">🎓 Universität Bern</h3>
             <p style="margin: 0; font-size: 1.1rem;">
-                Rechtsdatenbank für <strong>Forschung und Lehre</strong>
+                KI-gestützte Suche im Berner Recht mit eigenen Dokumenten
             </p>
             <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem;">
                 Entwickelt von <a href="https://kueblaw.ch" target="_blank" style="color: #ffd700; text-decoration: none; font-weight: bold;">kueblaw.ch</a>
