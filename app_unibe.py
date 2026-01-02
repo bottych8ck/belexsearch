@@ -339,7 +339,7 @@ def main():
         ">
             <h3 style="margin: 0 0 0.5rem 0; color: white;">🎓 Universität Bern</h3>
             <p style="margin: 0; font-size: 1.1rem;">
-                KI-gestützte Suche im Berner Recht mit eigenen Dokumenten
+                KI-gestützte Suche im Berner Bildungsrecht (inkl. eigenen Dokumenten)
             </p>
             <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem;">
                 Entwickelt von <a href="https://kueblaw.ch" target="_blank" style="color: #ffd700; text-decoration: none; font-weight: bold;">kueblaw.ch</a>
@@ -390,11 +390,11 @@ def main():
             st.write("")
             search_button = st.button("🔎 Suchen", type="primary", use_container_width=True)
 
-        # Zeige aktuellen Prompt-Status
+        # Zeige aktuellen Prompt-Status mit Hinweis zum Editor
         if st.session_state.use_custom_prompt:
-            st.info("ℹ️ Es wird ein angepasster Systemprompt verwendet")
+            st.info("ℹ️ Es wird ein angepasster Systemprompt verwendet → Tab **Promptengineering** zum Bearbeiten")
         else:
-            st.info("ℹ️ Es wird der Standard-Systemprompt verwendet")
+            st.info("ℹ️ Es wird der Standard-Systemprompt verwendet → Tab **Promptengineering** zum Bearbeiten")
 
         # Suche ausführen
         if search_button and query.strip():
