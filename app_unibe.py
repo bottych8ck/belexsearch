@@ -575,6 +575,36 @@ def main():
     tab1, tab2, tab3 = st.tabs(["🔍 Suche", "🛠️ Promptengineering", "📚 Wissensgrundlagen"])
 
     with tab1:
+        # Prompt-Auswahl im Such-Tab
+        saved_prompts = load_saved_prompts()
+
+        with st.expander("⚙️ Systemprompt auswählen", expanded=False):
+            prompt_options_search = ["Standard-Prompt"] + [p["name"] for p in saved_prompts]
+
+            selected_search_prompt = st.selectbox(
+                "Wählen Sie den Systemprompt für diese Suche:",
+                options=prompt_options_search,
+                key="search_prompt_selector"
+            )
+
+            if selected_search_prompt != "Standard-Prompt":
+                selected_prompt_obj = next((p for p in saved_prompts if p["name"] == selected_search_prompt), None)
+                if selected_prompt_obj:
+                    st.caption(f"📝 {selected_prompt_obj.get('description', 'Keine Beschreibung')}")
+                    if st.button("✅ Diesen Prompt verwenden", use_container_width=True):
+                        st.session_state.custom_system_prompt = selected_prompt_obj["prompt"]
+                        st.session_state.use_custom_prompt = True
+                        st.success(f"✅ Prompt '{selected_search_prompt}' wird jetzt verwendet!")
+                        st.rerun()
+            else:
+                if st.button("🔄 Standard-Prompt aktivieren", use_container_width=True):
+                    st.session_state.use_custom_prompt = False
+                    st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
+                    st.success("✅ Standard-Prompt wird verwendet!")
+                    st.rerun()
+
+        st.divider()
+
         # Eingabebereich
         col1, col2 = st.columns([5, 1])
 
@@ -591,11 +621,17 @@ def main():
             st.write("")
             search_button = st.button("🔎 Suchen", type="primary", use_container_width=True)
 
-        # Zeige aktuellen Prompt-Status mit Hinweis zum Editor
+        # Zeige aktuellen Prompt-Status
         if st.session_state.use_custom_prompt:
-            st.info("ℹ️ Es wird ein angepasster Systemprompt verwendet → Tab **Promptengineering** zum Bearbeiten")
+            # Finde heraus welcher Prompt aktiv ist
+            active_prompt_name = "Angepasster Prompt"
+            for p in saved_prompts:
+                if p["prompt"] == st.session_state.custom_system_prompt:
+                    active_prompt_name = p["name"]
+                    break
+            st.info(f"ℹ️ Aktiver Systemprompt: **{active_prompt_name}**")
         else:
-            st.info("ℹ️ Es wird der Standard-Systemprompt verwendet → Tab **Promptengineering** zum Bearbeiten")
+            st.info("ℹ️ Aktiver Systemprompt: **Standard-Prompt**")
 
         # Suche ausführen
         if search_button and query.strip():
@@ -840,11 +876,6 @@ def main():
                     height=80
                 )
 
-                created_by = st.text_input(
-                    "Ihr Name oder Email *",
-                    placeholder="Max Mustermann"
-                )
-
                 col_save1, col_save2 = st.columns([1, 1])
                 with col_save1:
                     submitted = st.form_submit_button("💾 Jetzt speichern", type="primary", use_container_width=True)
@@ -852,11 +883,11 @@ def main():
                     cancelled = st.form_submit_button("❌ Abbrechen", use_container_width=True)
 
                 if submitted:
-                    if not prompt_name or not prompt_description or not created_by:
+                    if not prompt_name or not prompt_description:
                         st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
                     else:
                         with st.spinner("Speichere Prompt via GitHub API..."):
-                            result = save_prompt_to_github(prompt_name, prompt_description, edited_prompt, created_by)
+                            result = save_prompt_to_github(prompt_name, prompt_description, edited_prompt, "User")
 
                         if result:
                             st.success(f"✅ Prompt '{prompt_name}' wurde erfolgreich gespeichert!")
