@@ -4,7 +4,9 @@ BELEX Streamlit App - Interaktive Suchoberfläche für Berner Gesetzessammlung
 Version für Universität Bern
 """
 
+import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -49,6 +51,96 @@ def load_config():
         st.stop()
 
     return api_key, filestore_id
+
+
+def load_saved_prompts():
+    """Lädt gespeicherte Systemprompts aus JSON-Datei"""
+    try:
+        prompts_file = Path(__file__).parent / "saved_prompts.json"
+        if prompts_file.exists():
+            with open(prompts_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("prompts", [])
+        return []
+    except Exception as e:
+        st.warning(f"⚠️ Fehler beim Laden der gespeicherten Prompts: {e}")
+        return []
+
+
+def save_prompt_locally(name, description, prompt_content, created_by):
+    """Speichert einen Prompt lokal in der JSON-Datei"""
+    try:
+        prompts_file = Path(__file__).parent / "saved_prompts.json"
+
+        # Lade existierende Prompts
+        if prompts_file.exists():
+            with open(prompts_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {"prompts": []}
+
+        # Erstelle neuen Prompt-Eintrag
+        new_prompt = {
+            "name": name,
+            "description": description,
+            "prompt": prompt_content,
+            "created_by": created_by,
+            "created_at": datetime.utcnow().isoformat() + "Z"
+        }
+
+        # Prüfe ob Prompt mit gleichem Namen existiert
+        existing_index = None
+        for i, p in enumerate(data["prompts"]):
+            if p["name"] == name:
+                existing_index = i
+                break
+
+        if existing_index is not None:
+            # Aktualisiere existierenden Prompt
+            data["prompts"][existing_index] = new_prompt
+        else:
+            # Füge neuen Prompt hinzu
+            data["prompts"].append(new_prompt)
+
+        # Speichere aktualisierte Datei
+        with open(prompts_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return True
+    except Exception as e:
+        st.error(f"❌ Fehler beim Speichern: {e}")
+        return False
+
+
+def delete_prompt_locally(name):
+    """Löscht einen Prompt aus der JSON-Datei"""
+    try:
+        prompts_file = Path(__file__).parent / "saved_prompts.json"
+
+        if not prompts_file.exists():
+            st.error("❌ Keine gespeicherten Prompts gefunden")
+            return False
+
+        # Lade existierende Prompts
+        with open(prompts_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Finde und entferne den Prompt
+        initial_count = len(data["prompts"])
+        data["prompts"] = [p for p in data["prompts"] if p["name"] != name]
+
+        if len(data["prompts"]) == initial_count:
+            st.error(f"❌ Prompt '{name}' nicht gefunden")
+            return False
+
+        # Speichere aktualisierte Datei
+        with open(prompts_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return True
+    except Exception as e:
+        st.error(f"❌ Fehler beim Löschen: {e}")
+        return False
 
 
 def extract_bsg_number(title):
@@ -533,23 +625,82 @@ def main():
         st.markdown("## 🛠️ Promptengineering")
         st.divider()
 
+        # Lade gespeicherte Prompts
+        saved_prompts = load_saved_prompts()
+
+        # Dropdown für gespeicherte Prompts
+        if saved_prompts:
+            st.markdown("### 📚 Gespeicherte Systemprompts")
+
+            # Erstelle Optionen für Dropdown
+            prompt_options = ["-- Neuen Prompt erstellen --"] + [p["name"] for p in saved_prompts]
+
+            selected_prompt_name = st.selectbox(
+                "Wählen Sie einen gespeicherten Prompt aus:",
+                options=prompt_options,
+                key="selected_saved_prompt"
+            )
+
+            # Wenn ein gespeicherter Prompt ausgewählt wurde
+            if selected_prompt_name != "-- Neuen Prompt erstellen --":
+                selected_prompt = next((p for p in saved_prompts if p["name"] == selected_prompt_name), None)
+
+                if selected_prompt:
+                    # Zeige Metadaten
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.caption(f"**Erstellt von:** {selected_prompt.get('created_by', 'Unbekannt')}")
+                    with col2:
+                        created_at = selected_prompt.get('created_at', '')
+                        if created_at:
+                            try:
+                                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                                st.caption(f"**Erstellt am:** {dt.strftime('%d.%m.%Y %H:%M')}")
+                            except:
+                                st.caption(f"**Erstellt am:** {created_at}")
+
+                    if selected_prompt.get('description'):
+                        st.info(f"ℹ️ {selected_prompt['description']}")
+
+                    # Buttons zum Laden und Löschen
+                    col_btn1, col_btn2 = st.columns([2, 1])
+                    with col_btn1:
+                        if st.button("📥 Prompt in Editor laden", type="secondary", use_container_width=True):
+                            st.session_state.loaded_prompt = selected_prompt["prompt"]
+                            st.rerun()
+                    with col_btn2:
+                        if st.button("🗑️ Löschen", type="secondary", use_container_width=True):
+                            if delete_prompt_locally(selected_prompt_name):
+                                st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
+                                st.info("💡 Committen Sie die Änderungen mit Git, um die Löschung dauerhaft zu machen.")
+                                st.rerun()
+                            else:
+                                st.error("❌ Fehler beim Löschen des Prompts")
+
+            st.divider()
+
         # Aktueller Systemprompt - direkt anzeigen und editierbar
         # Bestimme welcher Prompt gerade aktiv ist
-        if st.session_state.use_custom_prompt:
+        if 'loaded_prompt' in st.session_state:
+            current_prompt = st.session_state.loaded_prompt
+            del st.session_state.loaded_prompt
+        elif st.session_state.use_custom_prompt:
             current_prompt = st.session_state.custom_system_prompt
         else:
             current_prompt = DEFAULT_SYSTEM_PROMPT
+
+        st.markdown("### ✏️ Prompt-Editor")
 
         # Editierbares Textfeld für den aktuellen Systemprompt
         edited_prompt = st.text_area(
             "**Aktueller Systemprompt:**",
             value=current_prompt,
-            height=500,
+            height=400,
             key="prompt_editor"
         )
 
         # Anwenden-Button
-        col1, col2 = st.columns([1, 5])
+        col1, col2, col3 = st.columns([1, 1, 3])
         with col1:
             if st.button("✅ Anwenden", type="primary", use_container_width=True):
                 # Prüfe, ob der Prompt geändert wurde
@@ -564,11 +715,55 @@ def main():
                 st.rerun()
 
         with col2:
-            if st.button("🔄 Standard wiederherstellen", use_container_width=True):
+            if st.button("🔄 Standard", use_container_width=True):
                 st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
                 st.session_state.use_custom_prompt = False
                 st.success("✅ Standard-Prompt wiederhergestellt")
                 st.rerun()
+
+        st.divider()
+
+        # Speichern-Bereich
+        st.markdown("### 💾 Prompt speichern")
+
+        with st.expander("Aktuellen Prompt speichern", expanded=False):
+            st.markdown("Speichern Sie Ihren bearbeiteten Prompt für zukünftige Verwendung.")
+
+            prompt_name = st.text_input(
+                "Name des Prompts *",
+                placeholder="z.B. 'Studienrecht Assistent' oder 'Detaillierte Antworten'",
+                key="save_prompt_name"
+            )
+
+            prompt_description = st.text_area(
+                "Beschreibung *",
+                placeholder="Beschreiben Sie kurz, wofür dieser Prompt verwendet wird...",
+                height=100,
+                key="save_prompt_description"
+            )
+
+            created_by = st.text_input(
+                "Ihr Name oder Email *",
+                placeholder="Max Mustermann oder max@unibe.ch",
+                key="save_prompt_creator"
+            )
+
+            col_save1, col_save2 = st.columns([1, 3])
+
+            with col_save1:
+                if st.button("💾 Lokal speichern", type="primary", use_container_width=True):
+                    if not prompt_name or not prompt_description or not created_by:
+                        st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
+                    else:
+                        if save_prompt_locally(prompt_name, prompt_description, edited_prompt, created_by):
+                            st.success(f"✅ Prompt '{prompt_name}' wurde lokal gespeichert!")
+                            st.info("💡 Um den Prompt dauerhaft zu speichern und mit anderen zu teilen, commiten Sie die Änderungen mit Git.")
+
+            with col_save2:
+                st.markdown(
+                    "**GitHub Actions (optional):** Besuchen Sie das [Actions Tab](../../actions/workflows/save_prompt.yml) "
+                    "um den Prompt via GitHub Workflow zu speichern."
+                )
 
     with tab3:
         st.markdown("## 📚 Wissensgrundlagen")

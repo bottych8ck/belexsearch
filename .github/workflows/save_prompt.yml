@@ -1,0 +1,98 @@
+name: Save System Prompt
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt_name:
+        description: 'Name für den Systemprompt'
+        required: true
+        type: string
+      prompt_description:
+        description: 'Beschreibung des Prompts'
+        required: true
+        type: string
+      prompt_content:
+        description: 'Der vollständige Systemprompt'
+        required: true
+        type: string
+      created_by:
+        description: 'Erstellt von (Name oder Email)'
+        required: true
+        type: string
+
+jobs:
+  save-prompt:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Save prompt to JSON
+        run: |
+          python3 << 'EOF'
+          import json
+          from datetime import datetime
+          import os
+
+          # Eingabe aus GitHub Actions
+          prompt_name = """${{ github.event.inputs.prompt_name }}"""
+          prompt_description = """${{ github.event.inputs.prompt_description }}"""
+          prompt_content = """${{ github.event.inputs.prompt_content }}"""
+          created_by = """${{ github.event.inputs.created_by }}"""
+
+          # Lade existierende Prompts
+          try:
+              with open('saved_prompts.json', 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              data = {"prompts": []}
+
+          # Erstelle neuen Prompt-Eintrag
+          new_prompt = {
+              "name": prompt_name,
+              "description": prompt_description,
+              "prompt": prompt_content,
+              "created_by": created_by,
+              "created_at": datetime.utcnow().isoformat() + "Z"
+          }
+
+          # Prüfe ob Prompt mit gleichem Namen existiert
+          existing_index = None
+          for i, p in enumerate(data["prompts"]):
+              if p["name"] == prompt_name:
+                  existing_index = i
+                  break
+
+          if existing_index is not None:
+              # Aktualisiere existierenden Prompt
+              data["prompts"][existing_index] = new_prompt
+              print(f"Prompt '{prompt_name}' wurde aktualisiert")
+          else:
+              # Füge neuen Prompt hinzu
+              data["prompts"].append(new_prompt)
+              print(f"Neuer Prompt '{prompt_name}' wurde hinzugefügt")
+
+          # Speichere aktualisierte Datei
+          with open('saved_prompts.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+
+          print(f"Gesamt: {len(data['prompts'])} Prompt(s)")
+          EOF
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+          git add saved_prompts.json
+          git commit -m "Add/Update system prompt: ${{ github.event.inputs.prompt_name }}" || echo "No changes to commit"
+          git push
