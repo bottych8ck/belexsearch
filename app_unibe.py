@@ -737,146 +737,171 @@ def main():
         # Lade gespeicherte Prompts
         saved_prompts = load_saved_prompts()
 
-        # Dropdown für gespeicherte Prompts
-        if saved_prompts:
-            st.markdown("### 📚 Gespeicherte Systemprompts")
+        # Dropdown für Prompt-Auswahl
+        st.markdown("### 📚 Prompt auswählen")
 
-            # Erstelle Optionen für Dropdown
-            prompt_options = ["Standard-Prompt"] + [p["name"] for p in saved_prompts]
+        prompt_options = ["Standard-Prompt"] + [p["name"] for p in saved_prompts]
 
-            selected_prompt_name = st.selectbox(
-                "Wählen Sie einen Prompt aus:",
-                options=prompt_options,
-                key="selected_saved_prompt"
-            )
+        selected_prompt_name = st.selectbox(
+            "Wählen Sie einen Prompt zum Bearbeiten:",
+            options=prompt_options,
+            key="selected_saved_prompt"
+        )
 
-            # Bestimme welcher Prompt im Editor angezeigt wird
-            if selected_prompt_name == "Standard-Prompt":
-                current_prompt = DEFAULT_SYSTEM_PROMPT
-                selected_prompt = None
-            else:
-                selected_prompt = next((p for p in saved_prompts if p["name"] == selected_prompt_name), None)
-                if selected_prompt:
-                    current_prompt = selected_prompt["prompt"]
-
-                    # Zeige Metadaten
-                    col1, col2, col3 = st.columns([2, 2, 1])
-                    with col1:
-                        st.caption(f"**Erstellt von:** {selected_prompt.get('created_by', 'Unbekannt')}")
-                    with col2:
-                        created_at = selected_prompt.get('created_at', '')
-                        if created_at:
-                            try:
-                                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                                st.caption(f"**Erstellt am:** {dt.strftime('%d.%m.%Y %H:%M')}")
-                            except:
-                                st.caption(f"**Erstellt am:** {created_at}")
-                    with col3:
-                        if st.button("🗑️ Löschen", type="secondary", use_container_width=True, key="delete_prompt_btn"):
-                            with st.spinner("Lösche Prompt via GitHub API..."):
-                                result = delete_prompt_from_github(selected_prompt_name)
-
-                            if result:
-                                st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
-                                st.info("🔄 Seite wird neu geladen...")
-                                # Warte kurz damit User die Meldung sieht
-                                import time
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ Löschen fehlgeschlagen. Siehe Fehlermeldung oben.")
-
-                    if selected_prompt.get('description'):
-                        st.info(f"ℹ️ {selected_prompt['description']}")
-                else:
-                    current_prompt = DEFAULT_SYSTEM_PROMPT
-        else:
-            # Keine gespeicherten Prompts vorhanden
+        # Bestimme welcher Prompt angezeigt wird
+        if selected_prompt_name == "Standard-Prompt":
             current_prompt = DEFAULT_SYSTEM_PROMPT
             selected_prompt = None
+        else:
+            selected_prompt = next((p for p in saved_prompts if p["name"] == selected_prompt_name), None)
+            if selected_prompt:
+                current_prompt = selected_prompt["prompt"]
 
-        # Wenn ein Custom Prompt aktiv ist (aus der Session), verwende diesen
-        if st.session_state.use_custom_prompt:
-            current_prompt = st.session_state.custom_system_prompt
+                # Zeige Info über den ausgewählten Prompt
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.caption(f"✏️ Bearbeite: **{selected_prompt_name}**")
+                with col2:
+                    created_at = selected_prompt.get('created_at', '')
+                    if created_at:
+                        try:
+                            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            st.caption(f"Erstellt: {dt.strftime('%d.%m.%Y')} von {selected_prompt.get('created_by', 'Unbekannt')}")
+                        except:
+                            st.caption(f"Erstellt von {selected_prompt.get('created_by', 'Unbekannt')}")
+
+                if selected_prompt.get('description'):
+                    st.info(f"ℹ️ {selected_prompt['description']}")
+            else:
+                current_prompt = DEFAULT_SYSTEM_PROMPT
+                selected_prompt = None
 
         st.divider()
 
-        st.markdown("### ✏️ Prompt-Editor")
+        # Editor
+        st.markdown("### ✏️ Prompt bearbeiten")
 
-        # Editierbares Textfeld für den aktuellen Systemprompt
         edited_prompt = st.text_area(
-            "**Aktueller Systemprompt:**",
+            "Systemprompt:",
             value=current_prompt,
             height=400,
-            key="prompt_editor"
+            key="prompt_editor",
+            help="Bearbeiten Sie den Prompt hier. Klicken Sie 'Anwenden' um ihn für Suchen zu nutzen."
         )
 
-        # Anwenden-Button
-        col1, col2, col3 = st.columns([1, 1, 3])
+        # Aktionsbuttons
+        st.divider()
+        st.markdown("### 💾 Aktionen")
+
+        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+
         with col1:
-            if st.button("✅ Anwenden", type="primary", use_container_width=True):
-                # Prüfe, ob der Prompt geändert wurde
-                if edited_prompt != DEFAULT_SYSTEM_PROMPT:
-                    st.session_state.custom_system_prompt = edited_prompt
-                    st.session_state.use_custom_prompt = True
-                    st.success("✅ Angepasster Prompt wird ab jetzt verwendet")
-                else:
-                    st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
-                    st.session_state.use_custom_prompt = False
-                    st.success("✅ Standard-Prompt wird verwendet")
+            if st.button("✅ Anwenden", type="primary", use_container_width=True, help="Nutze diesen Prompt für Suchen"):
+                st.session_state.custom_system_prompt = edited_prompt
+                st.session_state.use_custom_prompt = True
+                st.success("✅ Prompt wird jetzt für Suchen verwendet!")
                 st.rerun()
 
         with col2:
-            if st.button("🔄 Standard", use_container_width=True):
-                st.session_state.custom_system_prompt = DEFAULT_SYSTEM_PROMPT
-                st.session_state.use_custom_prompt = False
-                st.success("✅ Standard-Prompt wiederhergestellt")
-                st.rerun()
+            # Speichern-Button mit Popup
+            save_clicked = st.button("💾 Als neuen Prompt speichern", use_container_width=True, help="Speichert dauerhaft im Repository")
 
-        st.divider()
+        with col3:
+            # Update-Button (nur bei gespeicherten Prompts)
+            if selected_prompt:
+                update_clicked = st.button("🔄 Änderungen speichern", use_container_width=True, help=f"Aktualisiert '{selected_prompt_name}'")
+            else:
+                update_clicked = False
 
-        # Speichern-Bereich
-        st.markdown("### 💾 Prompt speichern")
+        with col4:
+            # Löschen-Button (nur bei gespeicherten Prompts, nicht beim Standard)
+            if selected_prompt:
+                delete_clicked = st.button("🗑️", use_container_width=True, help="Löscht diesen Prompt")
+            else:
+                delete_clicked = False
 
-        with st.expander("Aktuellen Prompt speichern", expanded=False):
-            st.markdown("Speichern Sie Ihren bearbeiteten Prompt dauerhaft im Repository.")
+        # Speichern-Formular
+        if save_clicked:
+            st.session_state.show_save_form = True
 
-            prompt_name = st.text_input(
-                "Name des Prompts *",
-                placeholder="z.B. 'Studienrecht Assistent' oder 'Detaillierte Antworten'",
-                key="save_prompt_name"
-            )
+        if st.session_state.get('show_save_form', False):
+            st.divider()
+            st.markdown("#### Neuen Prompt speichern")
 
-            prompt_description = st.text_area(
-                "Beschreibung *",
-                placeholder="Beschreiben Sie kurz, wofür dieser Prompt verwendet wird...",
-                height=100,
-                key="save_prompt_description"
-            )
+            with st.form("save_prompt_form"):
+                prompt_name = st.text_input(
+                    "Name des Prompts *",
+                    placeholder="z.B. 'Studienrecht Assistent'",
+                )
 
-            created_by = st.text_input(
-                "Ihr Name oder Email *",
-                placeholder="Max Mustermann oder max@unibe.ch",
-                key="save_prompt_creator"
-            )
+                prompt_description = st.text_area(
+                    "Beschreibung *",
+                    placeholder="Beschreiben Sie kurz, wofür dieser Prompt verwendet wird...",
+                    height=80
+                )
 
-            if st.button("💾 Speichern", type="primary", use_container_width=True, key="save_prompt_btn"):
-                if not prompt_name or not prompt_description or not created_by:
-                    st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
-                else:
-                    with st.spinner("Speichere Prompt via GitHub API..."):
-                        result = save_prompt_to_github(prompt_name, prompt_description, edited_prompt, created_by)
+                created_by = st.text_input(
+                    "Ihr Name oder Email *",
+                    placeholder="Max Mustermann"
+                )
 
-                    if result:
-                        st.success(f"✅ Prompt '{prompt_name}' wurde erfolgreich gespeichert!")
-                        st.info("🔄 Seite wird neu geladen...")
-                        st.balloons()
-                        # Warte kurz damit User die Meldung sieht
-                        import time
-                        time.sleep(1.5)
-                        st.rerun()
+                col_save1, col_save2 = st.columns([1, 1])
+                with col_save1:
+                    submitted = st.form_submit_button("💾 Jetzt speichern", type="primary", use_container_width=True)
+                with col_save2:
+                    cancelled = st.form_submit_button("❌ Abbrechen", use_container_width=True)
+
+                if submitted:
+                    if not prompt_name or not prompt_description or not created_by:
+                        st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
                     else:
-                        st.error("❌ Speichern fehlgeschlagen. Siehe Fehlermeldung oben.")
+                        with st.spinner("Speichere Prompt via GitHub API..."):
+                            result = save_prompt_to_github(prompt_name, prompt_description, edited_prompt, created_by)
+
+                        if result:
+                            st.success(f"✅ Prompt '{prompt_name}' wurde erfolgreich gespeichert!")
+                            st.balloons()
+                            import time
+                            time.sleep(1.5)
+                            st.session_state.show_save_form = False
+                            st.rerun()
+                        else:
+                            st.error("❌ Speichern fehlgeschlagen.")
+
+                if cancelled:
+                    st.session_state.show_save_form = False
+                    st.rerun()
+
+        # Update-Funktion
+        if update_clicked and selected_prompt:
+            with st.spinner(f"Aktualisiere '{selected_prompt_name}'..."):
+                result = save_prompt_to_github(
+                    selected_prompt_name,
+                    selected_prompt.get('description', ''),
+                    edited_prompt,
+                    selected_prompt.get('created_by', 'Unbekannt')
+                )
+
+            if result:
+                st.success(f"✅ Prompt '{selected_prompt_name}' wurde aktualisiert!")
+                import time
+                time.sleep(1.5)
+                st.rerun()
+            else:
+                st.error("❌ Aktualisierung fehlgeschlagen.")
+
+        # Löschen-Funktion
+        if delete_clicked and selected_prompt:
+            with st.spinner(f"Lösche '{selected_prompt_name}'..."):
+                result = delete_prompt_from_github(selected_prompt_name)
+
+            if result:
+                st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
+                import time
+                time.sleep(1.5)
+                st.rerun()
+            else:
+                st.error("❌ Löschen fehlgeschlagen.")
 
     with tab3:
         st.markdown("## 📚 Wissensgrundlagen")
