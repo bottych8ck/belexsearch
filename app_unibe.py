@@ -4,6 +4,7 @@ BELEX Streamlit App - Interaktive Suchoberfläche für Berner Gesetzessammlung
 Version für Universität Bern
 """
 
+import base64
 import json
 import re
 from datetime import datetime
@@ -54,30 +55,65 @@ def load_config():
 
 
 def load_saved_prompts():
-    """Lädt gespeicherte Systemprompts aus JSON-Datei"""
+    """Lädt gespeicherte Systemprompts aus GitHub Repository"""
     try:
+        # Versuche zuerst aus GitHub zu laden
+        repo = st.secrets.get("github", {}).get("repo", "bottych8ck/belexsearch")
+        branch = st.secrets.get("github", {}).get("branch", "unibe-version")
+
+        url = f"https://raw.githubusercontent.com/{repo}/{branch}/saved_prompts.json"
+        response = requests.get(url, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("prompts", [])
+
+        # Fallback: Lokale Datei (für Entwicklung)
         prompts_file = Path(__file__).parent / "saved_prompts.json"
         if prompts_file.exists():
             with open(prompts_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return data.get("prompts", [])
+
         return []
     except Exception as e:
         st.warning(f"⚠️ Fehler beim Laden der gespeicherten Prompts: {e}")
         return []
 
 
-def save_prompt_locally(name, description, prompt_content, created_by):
-    """Speichert einen Prompt lokal in der JSON-Datei"""
+def save_prompt_to_github(name, description, prompt_content, created_by):
+    """Speichert einen Prompt direkt via GitHub API"""
     try:
-        prompts_file = Path(__file__).parent / "saved_prompts.json"
+        # Lade GitHub-Konfiguration aus Secrets
+        github_token = st.secrets.get("github", {}).get("token", "")
+        repo = st.secrets.get("github", {}).get("repo", "bottych8ck/belexsearch")
+        branch = st.secrets.get("github", {}).get("branch", "unibe-version")
 
-        # Lade existierende Prompts
-        if prompts_file.exists():
-            with open(prompts_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        if not github_token:
+            st.error("❌ GitHub Token nicht konfiguriert. Bitte kontaktieren Sie den Administrator.")
+            return False
+
+        # Lade aktuelle Datei von GitHub
+        file_path = "saved_prompts.json"
+        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        headers = {
+            "Authorization": f"token {github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+        # Hole aktuelle Datei
+        params = {"ref": branch}
+        response = requests.get(url, headers=headers, params=params)
+
+        if response.status_code == 200:
+            file_data = response.json()
+            current_content = base64.b64decode(file_data["content"]).decode("utf-8")
+            data = json.loads(current_content)
+            sha = file_data["sha"]
         else:
+            # Datei existiert noch nicht
             data = {"prompts": []}
+            sha = None
 
         # Erstelle neuen Prompt-Eintrag
         new_prompt = {
@@ -96,34 +132,71 @@ def save_prompt_locally(name, description, prompt_content, created_by):
                 break
 
         if existing_index is not None:
-            # Aktualisiere existierenden Prompt
             data["prompts"][existing_index] = new_prompt
+            action = "Update"
         else:
-            # Füge neuen Prompt hinzu
             data["prompts"].append(new_prompt)
+            action = "Add"
 
-        # Speichere aktualisierte Datei
-        with open(prompts_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # Erstelle neuen Content
+        new_content = json.dumps(data, ensure_ascii=False, indent=2)
+        encoded_content = base64.b64encode(new_content.encode("utf-8")).decode("utf-8")
 
-        return True
+        # Pushe zu GitHub
+        commit_data = {
+            "message": f"{action} prompt: {name}",
+            "content": encoded_content,
+            "branch": branch
+        }
+
+        if sha:
+            commit_data["sha"] = sha
+
+        response = requests.put(url, headers=headers, json=commit_data)
+
+        if response.status_code in [200, 201]:
+            return True
+        else:
+            st.error(f"❌ GitHub API Fehler: {response.status_code} - {response.text}")
+            return False
+
     except Exception as e:
-        st.error(f"❌ Fehler beim Speichern: {e}")
+        st.error(f"❌ Fehler beim Speichern via GitHub: {e}")
         return False
 
 
-def delete_prompt_locally(name):
-    """Löscht einen Prompt aus der JSON-Datei"""
+def delete_prompt_from_github(name):
+    """Löscht einen Prompt direkt via GitHub API"""
     try:
-        prompts_file = Path(__file__).parent / "saved_prompts.json"
+        # Lade GitHub-Konfiguration aus Secrets
+        github_token = st.secrets.get("github", {}).get("token", "")
+        repo = st.secrets.get("github", {}).get("repo", "bottych8ck/belexsearch")
+        branch = st.secrets.get("github", {}).get("branch", "unibe-version")
 
-        if not prompts_file.exists():
+        if not github_token:
+            st.error("❌ GitHub Token nicht konfiguriert. Bitte kontaktieren Sie den Administrator.")
+            return False
+
+        # Lade aktuelle Datei von GitHub
+        file_path = "saved_prompts.json"
+        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        headers = {
+            "Authorization": f"token {github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+
+        # Hole aktuelle Datei
+        params = {"ref": branch}
+        response = requests.get(url, headers=headers, params=params)
+
+        if response.status_code != 200:
             st.error("❌ Keine gespeicherten Prompts gefunden")
             return False
 
-        # Lade existierende Prompts
-        with open(prompts_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        file_data = response.json()
+        current_content = base64.b64decode(file_data["content"]).decode("utf-8")
+        data = json.loads(current_content)
+        sha = file_data["sha"]
 
         # Finde und entferne den Prompt
         initial_count = len(data["prompts"])
@@ -133,11 +206,26 @@ def delete_prompt_locally(name):
             st.error(f"❌ Prompt '{name}' nicht gefunden")
             return False
 
-        # Speichere aktualisierte Datei
-        with open(prompts_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # Erstelle neuen Content
+        new_content = json.dumps(data, ensure_ascii=False, indent=2)
+        encoded_content = base64.b64encode(new_content.encode("utf-8")).decode("utf-8")
 
-        return True
+        # Pushe zu GitHub
+        commit_data = {
+            "message": f"Delete prompt: {name}",
+            "content": encoded_content,
+            "sha": sha,
+            "branch": branch
+        }
+
+        response = requests.put(url, headers=headers, json=commit_data)
+
+        if response.status_code in [200, 201]:
+            return True
+        else:
+            st.error(f"❌ GitHub API Fehler: {response.status_code}")
+            return False
+
     except Exception as e:
         st.error(f"❌ Fehler beim Löschen: {e}")
         return False
@@ -670,12 +758,10 @@ def main():
                             st.rerun()
                     with col_btn2:
                         if st.button("🗑️ Löschen", type="secondary", use_container_width=True):
-                            if delete_prompt_locally(selected_prompt_name):
-                                st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
-                                st.info("💡 Committen Sie die Änderungen mit Git, um die Löschung dauerhaft zu machen.")
-                                st.rerun()
-                            else:
-                                st.error("❌ Fehler beim Löschen des Prompts")
+                            with st.spinner("Lösche Prompt..."):
+                                if delete_prompt_from_github(selected_prompt_name):
+                                    st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
+                                    st.rerun()
 
             st.divider()
 
@@ -727,7 +813,7 @@ def main():
         st.markdown("### 💾 Prompt speichern")
 
         with st.expander("Aktuellen Prompt speichern", expanded=False):
-            st.markdown("Speichern Sie Ihren bearbeiteten Prompt für zukünftige Verwendung.")
+            st.markdown("Speichern Sie Ihren bearbeiteten Prompt dauerhaft im Repository.")
 
             prompt_name = st.text_input(
                 "Name des Prompts *",
@@ -748,22 +834,15 @@ def main():
                 key="save_prompt_creator"
             )
 
-            col_save1, col_save2 = st.columns([1, 3])
-
-            with col_save1:
-                if st.button("💾 Lokal speichern", type="primary", use_container_width=True):
-                    if not prompt_name or not prompt_description or not created_by:
-                        st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
-                    else:
-                        if save_prompt_locally(prompt_name, prompt_description, edited_prompt, created_by):
-                            st.success(f"✅ Prompt '{prompt_name}' wurde lokal gespeichert!")
-                            st.info("💡 Um den Prompt dauerhaft zu speichern und mit anderen zu teilen, commiten Sie die Änderungen mit Git.")
-
-            with col_save2:
-                st.markdown(
-                    "**GitHub Actions (optional):** Besuchen Sie das [Actions Tab](../../actions/workflows/save_prompt.yml) "
-                    "um den Prompt via GitHub Workflow zu speichern."
-                )
+            if st.button("💾 Speichern", type="primary", use_container_width=True):
+                if not prompt_name or not prompt_description or not created_by:
+                    st.error("❌ Bitte füllen Sie alle Pflichtfelder aus")
+                else:
+                    with st.spinner("Speichere Prompt..."):
+                        if save_prompt_to_github(prompt_name, prompt_description, edited_prompt, created_by):
+                            st.success(f"✅ Prompt '{prompt_name}' wurde gespeichert!")
+                            st.balloons()
+                            st.rerun()
 
     with tab3:
         st.markdown("## 📚 Wissensgrundlagen")
