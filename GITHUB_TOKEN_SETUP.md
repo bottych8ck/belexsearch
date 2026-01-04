@@ -8,16 +8,32 @@ Die App speichert Prompts jetzt **automatisch** via GitHub API - User müssen nu
 
 ### Schritt 1: GitHub Personal Access Token erstellen
 
-1. Gehe zu GitHub: https://github.com/settings/tokens
-2. Klicke auf **"Generate new token"** → **"Generate new token (classic)"**
-3. Gib dem Token einen Namen: **"BELEX Prompt Manager"**
-4. Wähle eine Ablaufzeit: **"No expiration"** (oder nach Bedarf)
-5. Wähle die folgenden **Scopes** (Berechtigungen):
-   - ✅ **`repo`** (vollständiger Repository-Zugriff)
-     - Dies gibt Zugriff auf Code, Commits und Pull Requests
+**WICHTIG**: Verwende einen **Fine-grained personal access token** (empfohlen) oder Classic Token.
 
-6. Klicke auf **"Generate token"**
-7. **WICHTIG**: Kopiere den Token sofort - er wird nur einmal angezeigt!
+#### Option A: Fine-grained Token (Empfohlen - Sicherer)
+
+1. Gehe zu: https://github.com/settings/personal-access-tokens/new
+2. **Token name**: "BELEX Prompt Manager"
+3. **Expiration**: "No expiration" oder nach Bedarf
+4. **Repository access**:
+   - ✅ "Only select repositories"
+   - Wähle: **bottych8ck/belexsearch**
+5. **Permissions** → **Repository permissions**:
+   - ✅ **Contents**: "Read and write" (für Datei-Änderungen)
+   - ✅ **Metadata**: "Read-only" (automatisch ausgewählt)
+6. Klicke **"Generate token"**
+7. **WICHTIG**: Kopiere den Token sofort!
+
+#### Option B: Classic Token (Einfacher, aber mehr Rechte)
+
+1. Gehe zu: https://github.com/settings/tokens
+2. Klicke **"Generate new token"** → **"Generate new token (classic)"**
+3. **Note**: "BELEX Prompt Manager"
+4. **Expiration**: "No expiration" oder nach Bedarf
+5. **Scopes**:
+   - ✅ **`repo`** (gesamter Haken - gibt vollen Repository-Zugriff)
+6. Klicke **"Generate token"**
+7. **WICHTIG**: Kopiere den Token sofort!
 
 ### Schritt 2: Token in Streamlit Secrets speichern
 
@@ -105,13 +121,26 @@ branch = "unibe-version"
 2. Update Streamlit Secrets
 3. Restart App
 
-### Problem: "GitHub API Fehler: 403"
+### Problem: "GitHub API Fehler: 403" oder "Resource not accessible by personal access token"
 
-**Ursache**: Token hat nicht die richtigen Berechtigungen
+**Ursache**: Token hat nicht die richtigen Berechtigungen oder falscher Token-Typ
 
 **Lösung**:
-1. Prüfe Token-Scopes: Muss `repo` haben
-2. Erstelle ggf. neuen Token mit korrekten Scopes
+
+**Für Fine-grained Token**:
+1. Gehe zu: https://github.com/settings/personal-access-tokens
+2. Klicke auf deinen Token
+3. Prüfe **"Repository access"**:
+   - Muss "bottych8ck/belexsearch" enthalten
+4. Prüfe **"Permissions"**:
+   - **Contents**: Muss "Read and write" sein (NICHT nur "Read-only")
+5. Wenn falsch: Klicke "Regenerate token" und passe Permissions an
+
+**Für Classic Token**:
+1. Gehe zu: https://github.com/settings/tokens
+2. Erstelle neuen Token
+3. Scope **`repo`** muss VOLLSTÄNDIG ausgewählt sein (alle Unterpunkte)
+4. Kopiere neuen Token und update Secrets
 
 ### Problem: "GitHub API Fehler: 404"
 

@@ -97,8 +97,9 @@ def save_prompt_to_github(name, description, prompt_content, created_by):
         file_path = "saved_prompts.json"
         url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
         headers = {
-            "Authorization": f"token {github_token}",
-            "Accept": "application/vnd.github.v3+json"
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
         }
 
         # Hole aktuelle Datei
@@ -181,8 +182,9 @@ def delete_prompt_from_github(name):
         file_path = "saved_prompts.json"
         url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
         headers = {
-            "Authorization": f"token {github_token}",
-            "Accept": "application/vnd.github.v3+json"
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
         }
 
         # Hole aktuelle Datei
