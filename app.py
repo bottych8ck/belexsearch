@@ -328,7 +328,7 @@ def main():
             query = st.text_area(
                 "🔍 Ihre Rechtsfrage:",
                 height=100,
-                placeholder="z.B. 'Welche Regelungen gelten für Baugesuche?' oder 'Was sagt das Gesetz über Steuererklärungsfristen?'",
+                placeholder="z.B. 'Kann ich Lehrpersonen befristet anstellen?' oder 'Ist es möglich, eine nicht bestandenes Studienjahr zu repetieren?",
                 help="Stellen Sie Ihre Frage in natürlicher Sprache"
             )
 
@@ -816,7 +816,7 @@ def main():
 
         st.markdown("### 🧪 Testversion")
         st.markdown("""
-            Diese Testversion wurde für die **Bildungsdirektion des Kantons Bern** entwickelt.
+            Diese Testversion wurde für die **Universität Bern** entwickelt.
 
             **Entwickelt von:**
             [kueblaw.ch](https://kueblaw.ch)
