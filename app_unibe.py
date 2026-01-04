@@ -235,7 +235,16 @@ def delete_prompt_from_github(name):
         if response.status_code in [200, 201]:
             return True
         else:
-            st.error(f"❌ GitHub API Fehler: {response.status_code}")
+            # Detaillierte Fehlermeldung
+            try:
+                error_msg = response.json().get('message', response.text)
+            except:
+                error_msg = response.text
+            st.error(f"❌ GitHub API Fehler {response.status_code}: {error_msg}")
+
+            # Debug-Info
+            with st.expander("🔍 Debug-Informationen (Löschen)"):
+                st.code(f"URL: {url}\nStatus: {response.status_code}\nResponse: {response.text[:500]}")
             return False
 
     except Exception as e:
@@ -764,10 +773,18 @@ def main():
                                 st.caption(f"**Erstellt am:** {created_at}")
                     with col3:
                         if st.button("🗑️ Löschen", type="secondary", use_container_width=True, key="delete_prompt_btn"):
-                            with st.spinner("Lösche Prompt..."):
-                                if delete_prompt_from_github(selected_prompt_name):
-                                    st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
-                                    st.rerun()
+                            with st.spinner("Lösche Prompt via GitHub API..."):
+                                result = delete_prompt_from_github(selected_prompt_name)
+
+                            if result:
+                                st.success(f"✅ Prompt '{selected_prompt_name}' wurde gelöscht!")
+                                st.info("🔄 Seite wird neu geladen...")
+                                # Warte kurz damit User die Meldung sieht
+                                import time
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("❌ Löschen fehlgeschlagen. Siehe Fehlermeldung oben.")
 
                     if selected_prompt.get('description'):
                         st.info(f"ℹ️ {selected_prompt['description']}")
